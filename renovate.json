@@ -1,73 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "labels": ["dependencies"],
-  "timezone": "Europe/Copenhagen",
-  "ignoreDeps": ["biq_internal-http_client", "biq_internal-failprop"],
-  "packageRules": [
-    {
-      "groupName": "Development & Test Dependencies",
-      "matchManagers": ["bundler"],
-      "matchDepTypes": ["development", "test"]
-    },
-    {
-      "groupName": "CI & Build Dependencies",
-      "matchManagers": ["bundler"],
-      "matchDepTypes": ["ci"]
-    },
-    {
-      "groupName": "Production Dependencies",
-      "matchManagers": ["bundler"],
-      "matchDepTypes": ["default", "production"]
-    },
-    {
-      "groupName": "Frontend (Rails & JS)",
-      "matchManagers": ["bundler"],
-      "matchPackageNames": ["/^stimulus-rails|turbo-rails|view_component/"]
-    },
-    {
-      "groupName": "Backend (Rails Core)",
-      "matchManagers": ["bundler"],
-      "matchPackageNames": [
-        "/^activemodel|activerecord|capistrano|devise|flipper|graphql|puma|rails|roar|sentry|sunspot/"
-      ]
-    },
-    {
-      "groupName": "Asset Pipeline & Styles",
-      "matchManagers": ["bundler"],
-      "matchPackageNames": [
-        "/^sassc|jsbundling|tailwindcss|webpacker|lodash|jquery/"
-      ]
-    },
-    {
-      "groupName": "Testing & Mocking Tools",
-      "matchManagers": ["bundler"],
-      "matchPackageNames": [
-        "/^capybara|faker|minitest|rubocop|simplecov|timecop|webmock/"
-      ]
-    },
-    {
-      "groupName": "Infrastructure & Deployment",
-      "matchManagers": ["bundler"],
-      "matchPackageNames": [
-        "/^aws-sdk|passenger|rake|bundler/"
-      ]
-    },
-    {
-      "groupName": "Docker Images",
-      "matchDatasources": ["docker"]
-    },
-    {
-      "groupName": "Other Ruby Gems",
-      "matchManagers": ["bundler"],
-      "matchPackageNames": [
-        "/^aasm|addressable|bcrypt|nokogiri/"
-      ]
-    },
-    {
-      "groupName": "Ignore Internal Gems",
-      "enabled": false,
-      "matchPackageNames": ["/^biq_internal-.*/"]
-    }
-  ]
+  "extends": [
+    "config:recommended",
+    "schedule:earlyMondays"
+  ],
+  "labels": [
+    "dependencies",
+    "{{categories}}"
+  ],
+  "timezone": "Europe/Copenhagen"
 }
