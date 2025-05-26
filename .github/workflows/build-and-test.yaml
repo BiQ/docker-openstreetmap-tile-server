@@ -134,6 +134,16 @@ jobs:
     -
       name: Checkout
       uses: actions/checkout@v3
+
+    -
+      name: Debug Environment Variables
+      run: |
+        echo "IMAGE: ${{ env.IMAGE }}"
+        echo "TAG: ${{ env.TAG }}"
+        if [ -z "${{ env.IMAGE }}" ] || [ -z "${{ env.TAG }}" ]; then
+          echo "ERROR: IMAGE or TAG is not set!" >&2
+          exit 1
+        fi
     -
       name: Environment
       run : |
