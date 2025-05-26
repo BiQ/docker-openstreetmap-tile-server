@@ -3,6 +3,26 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    apache2 \
+    cron \
+    dateutils \
+    fonts-hanazono \
+    fonts-noto-cjk \
+    fonts-noto-hinted \
+    fonts-noto-unhinted \
+    fonts-unifont \
+    gnupg2 \
+    gdal-bin \
+    liblua5.3-dev \
+    lua5.3 \
+    mapnik-utils \
+    npm \
+    osm2pgsql \
+    --fix-missing && \
+    apt-get autoremove --yes && \
+    rm -rf /var/lib/{apt,dpkg,cache,log}/
+
 RUN apt-get update \
 && apt-get install -y --no-install-recommends \
  ca-certificates gnupg lsb-release locales \
