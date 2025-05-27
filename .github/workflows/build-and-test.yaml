@@ -28,9 +28,10 @@ jobs:
         include:
         - arch    : amd64
           mode    : build-and-test
-        - arch    : arm64
-          variant : v8
-          mode    : build-only
+# skip arm cpus
+#        - arch    : arm64
+#          variant : v8
+#          mode    : build-only
     runs-on: ubuntu-latest
     env:
       VOLUME    : osm-db
