@@ -173,7 +173,7 @@ if [ "$1" == "import" ]; then
     # Initialize PostgreSQL
     createPostgresConfig
     service postgresql start
-    sudo -u postgres createuser --if-not-exists renderer
+    sudo -u postgres psql -c "SELECT 1 FROM pg_roles WHERE rolname='renderer'" | grep -q 1 || sudo -u postgres createuser renderer
     sudo -u postgres createdb -E UTF8 -O renderer gis || true
     sudo -u postgres psql -d gis -c "CREATE EXTENSION IF NOT EXISTS postgis;"
     sudo -u postgres psql -d gis -c "CREATE EXTENSION IF NOT EXISTS hstore;"
