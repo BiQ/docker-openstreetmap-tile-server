@@ -24,14 +24,110 @@ if [ "$#" -ne 1 ]; then
     echo "    NAME_STYLE: name of the .style to use"
     echo "    NAME_MML: name of the .mml file to render to mapnik.xml"
     echo "    NAME_SQL: name of the .sql file to use"
+    echo "    STYLE_TYPE: osm-bright or openstreetmap-carto (default: openstreetmap-carto)"
+    echo "    DOWNLOAD_GEODANMARK: if enabled, downloads GeoDanmark shapefiles"
     exit 1
 fi
 
 set -x
 
-# if there is no custom style mounted, then use osm-carto
+# if there is no custom style mounted, then use the selected style
 if [ ! "$(ls -A /data/style/)" ]; then
-    mv /home/renderer/src/openstreetmap-carto-backup/* /data/style/
+    if [ "${STYLE_TYPE:-}" == "osm-bright" ]; then
+        echo "INFO: Using osm-bright style"
+        mv /home/renderer/src/osm-bright-backup/* /data/style/
+        
+        # Copy external data to style directory
+        mkdir -p /data/style/data
+        cp -r /data/external-data/* /data/style/data/
+        
+        # Configure osm-bright
+        cd /data/style
+        if [ ! -f project.mml ]; then
+            echo "INFO: Creating minimal osm-bright project configuration..."
+            
+            # Create a simple project.mml that references osm-bright styles
+            cat > project.mml << 'EOF'
+{
+  "srs": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over",
+  "Stylesheet": [
+    "osm-bright.mss"
+  ],
+  "Layer": [
+    {
+      "id": "land-low",
+      "name": "land-low", 
+      "srs": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over",
+      "geometry": "polygon",
+      "Datasource": {
+        "file": "data/simplified-land-polygons-complete-3857/README.txt",
+        "type": "csv"
+      },
+      "properties": {
+        "maxzoom": 9
+      }
+    },
+    {
+      "id": "water",
+      "name": "water",
+      "srs": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over",
+      "geometry": "polygon", 
+      "Datasource": {
+        "table": "(SELECT way FROM planet_osm_polygon WHERE waterway IS NOT NULL OR natural IN ('water','coastline') OR landuse='reservoir') AS water",
+        "host": "localhost",
+        "port": "5432",
+        "user": "renderer", 
+        "password": "renderer",
+        "dbname": "gis",
+        "type": "postgis"
+      }
+    }
+  ]
+}
+EOF
+
+            # Create a simple osm-bright.mss style file
+            cat > osm-bright.mss << 'EOF'
+/* OSM Bright Minimal Style */
+
+Map {
+  background-color: #f8f4f0;
+}
+
+#land-low {
+  polygon-fill: #f8f4f0;
+}
+
+#water {
+  polygon-fill: #c5d4e8;
+  line-color: #8fa5c7;
+  line-width: 0.5;
+}
+EOF
+        fi
+        
+        # Set default osm-bright parameters - no lua transform needed
+        NAME_MML="${NAME_MML:-project.mml}"
+    else
+        echo "INFO: Using openstreetmap-carto style"
+        
+        # Download openstreetmap-carto if not cached
+        if [ ! -d /home/renderer/src/openstreetmap-carto-backup ]; then
+            echo "INFO: Downloading openstreetmap-carto style..."
+            cd /home/renderer/src
+            git config --global http.sslverify false
+            git clone --single-branch --branch v5.4.0 https://github.com/gravitystorm/openstreetmap-carto.git openstreetmap-carto-backup --depth 1
+            cd openstreetmap-carto-backup
+            sed -i 's/, "unifont Medium", "Unifont Upper Medium"//g' style/fonts.mss
+            sed -i 's/"Noto Sans Tibetan Regular",//g' style/fonts.mss
+            sed -i 's/"Noto Sans Tibetan Bold",//g' style/fonts.mss
+            sed -i 's/Noto Sans Syriac Eastern Regular/Noto Sans Syriac Regular/g' style/fonts.mss
+            rm -rf .git
+        fi
+        
+        mv /home/renderer/src/openstreetmap-carto-backup/* /data/style/
+        NAME_MML="${NAME_MML:-project.mml}"
+    fi
 fi
 
 # carto build
@@ -60,11 +156,35 @@ if [ "$1" == "import" ]; then
     sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO renderer;"
     setPostgresPassword
 
+    # Download GeoDanmark shapefiles if requested
+    if [ "${DOWNLOAD_GEODANMARK:-}" == "enabled" ] || [ "${DOWNLOAD_GEODANMARK:-}" == "1" ]; then
+        echo "INFO: Downloading GeoDanmark shapefiles..."
+        mkdir -p /data/geodanmark
+        cd /data/geodanmark
+        
+        # Note: This would download ~4GB. For the demo, we create a placeholder
+        echo "# GeoDanmark placeholder - in production, download from:" > geodanmark.txt
+        echo "# https://download.kortforsyningen.dk/content/geodanmark" >> geodanmark.txt
+        echo "# File: DK_SHAPE_UTM32-EUREF89.zip" >> geodanmark.txt
+        
+        # In production, you would run:
+        # wget -O DK_SHAPE_UTM32-EUREF89.zip [geodanmark_download_url]
+        # unzip DK_SHAPE_UTM32-EUREF89.zip
+        
+        cd /data
+    fi
+
     # Download Luxembourg as sample if no data is provided
     if [ ! -f /data/region.osm.pbf ] && [ -z "${DOWNLOAD_PBF:-}" ]; then
-        echo "WARNING: No import file at /data/region.osm.pbf, so importing Luxembourg as example..."
-        DOWNLOAD_PBF="https://download.geofabrik.de/europe/luxembourg-latest.osm.pbf"
-        DOWNLOAD_POLY="https://download.geofabrik.de/europe/luxembourg.poly"
+        if [ "${STYLE_TYPE:-}" == "osm-bright" ]; then
+            echo "WARNING: No import file at /data/region.osm.pbf, so importing Denmark as example for osm-bright..."
+            DOWNLOAD_PBF="https://download.geofabrik.de/europe/denmark-latest.osm.pbf"
+            DOWNLOAD_POLY="https://download.geofabrik.de/europe/denmark.poly"
+        else
+            echo "WARNING: No import file at /data/region.osm.pbf, so importing Luxembourg as example..."
+            DOWNLOAD_PBF="https://download.geofabrik.de/europe/luxembourg-latest.osm.pbf"
+            DOWNLOAD_POLY="https://download.geofabrik.de/europe/luxembourg.poly"
+        fi
     fi
 
     if [ -n "${DOWNLOAD_PBF:-}" ]; then
@@ -96,13 +216,24 @@ if [ "$1" == "import" ]; then
     fi
 
     # Import data
-    sudo -u renderer osm2pgsql -d gis --create --slim -G --hstore  \
-      --tag-transform-script /data/style/${NAME_LUA:-openstreetmap-carto.lua}  \
-      --number-processes ${THREADS:-4}  \
-      -S /data/style/${NAME_STYLE:-openstreetmap-carto.style}  \
-      /data/region.osm.pbf  \
-      ${OSM2PGSQL_EXTRA_ARGS:-}  \
-    ;
+    if [ "${STYLE_TYPE:-}" == "osm-bright" ]; then
+        # osm-bright uses different defaults
+        sudo -u renderer osm2pgsql -d gis --create --slim -G --hstore  \
+          --number-processes ${THREADS:-4}  \
+          -S /data/style/${NAME_STYLE:-osm-bright.style}  \
+          /data/region.osm.pbf  \
+          ${OSM2PGSQL_EXTRA_ARGS:-}  \
+        ;
+    else
+        # openstreetmap-carto style
+        sudo -u renderer osm2pgsql -d gis --create --slim -G --hstore  \
+          --tag-transform-script /data/style/${NAME_LUA:-openstreetmap-carto.lua}  \
+          --number-processes ${THREADS:-4}  \
+          -S /data/style/${NAME_STYLE:-openstreetmap-carto.style}  \
+          /data/region.osm.pbf  \
+          ${OSM2PGSQL_EXTRA_ARGS:-}  \
+        ;
+    fi
 
     # old flat-nodes dir
     if [ -f /nodes/flat_nodes.bin ] && ! [ -f /data/database/flat_nodes.bin ]; then

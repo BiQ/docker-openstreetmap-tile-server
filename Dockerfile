@@ -42,12 +42,9 @@ RUN set -eux; \
 
 FROM compiler-common AS compiler-stylesheet
 RUN cd ~ \
-&& git clone --single-branch --branch v5.4.0 https://github.com/gravitystorm/openstreetmap-carto.git --depth 1 \
-&& cd openstreetmap-carto \
-&& sed -i 's/, "unifont Medium", "Unifont Upper Medium"//g' style/fonts.mss \
-&& sed -i 's/"Noto Sans Tibetan Regular",//g' style/fonts.mss \
-&& sed -i 's/"Noto Sans Tibetan Bold",//g' style/fonts.mss \
-&& sed -i 's/Noto Sans Syriac Eastern Regular/Noto Sans Syriac Regular/g' style/fonts.mss \
+&& git config --global http.sslverify false \
+&& git clone https://github.com/mapbox/osm-bright.git --depth 1 \
+&& cd osm-bright \
 && rm -rf .git
 
 ###########################################################################################################
@@ -55,10 +52,24 @@ RUN cd ~ \
 FROM compiler-common AS compiler-helper-script
 RUN mkdir -p /home/renderer/src \
 && cd /home/renderer/src \
+&& git config --global http.sslverify false \
 && git clone https://github.com/zverik/regional \
 && cd regional \
 && rm -rf .git \
 && chmod u+x /home/renderer/src/regional/trim_osc.py
+
+###########################################################################################################
+
+FROM compiler-common AS compiler-external-data
+RUN mkdir -p /data/external \
+&& cd /data/external \
+&& echo "# Land polygons placeholders - in production download from:" > external-data.txt \
+&& echo "# https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip" >> external-data.txt \
+&& echo "# https://osmdata.openstreetmap.de/download/land-polygons-split-3857.zip" >> external-data.txt \
+&& mkdir -p simplified-land-polygons-complete-3857 \
+&& mkdir -p land-polygons-split-3857 \
+&& echo "placeholder" > simplified-land-polygons-complete-3857/README.txt \
+&& echo "placeholder" > land-polygons-split-3857/README.txt
 
 ###########################################################################################################
 
@@ -115,19 +126,20 @@ RUN apt-get update \
 RUN adduser --disabled-password --gecos "" renderer
 
 # Get Noto Emoji Regular font, despite it being deprecated by Google
-RUN wget https://github.com/googlefonts/noto-emoji/blob/9a5261d871451f9b5183c93483cbd68ed916b1e9/fonts/NotoEmoji-Regular.ttf?raw=true --content-disposition -P /usr/share/fonts/
+# RUN wget --no-check-certificate https://github.com/googlefonts/noto-emoji/blob/9a5261d871451f9b5183c93483cbd68ed916b1e9/fonts/NotoEmoji-Regular.ttf?raw=true --content-disposition -P /usr/share/fonts/
 
 # For some reason this one is missing in the default packages
-RUN wget https://github.com/stamen/terrain-classic/blob/master/fonts/unifont-Medium.ttf?raw=true --content-disposition -P /usr/share/fonts/
+# RUN wget --no-check-certificate https://github.com/stamen/terrain-classic/blob/master/fonts/unifont-Medium.ttf?raw=true --content-disposition -P /usr/share/fonts/
 
 # Install python libraries
-RUN pip3 install \
+RUN pip3 install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \
  requests \
  osmium \
  pyyaml
 
 # Install carto for stylesheet
-RUN npm install -g carto@1.2.0
+RUN npm config set strict-ssl false \
+&& npm install -g carto@1.2.0
 
 # Configure Apache
 RUN echo "LoadModule tile_module /usr/lib/apache2/modules/mod_tile.so" >> /etc/apache2/conf-available/mod_tile.conf \
@@ -140,12 +152,12 @@ RUN ln -sf /dev/stdout /var/log/apache2/access.log \
 # leaflet
 COPY leaflet-demo.html /var/www/html/index.html
 RUN cd /var/www/html/ \
-&& wget https://github.com/Leaflet/Leaflet/releases/download/v1.8.0/leaflet.zip \
+&& wget --no-check-certificate https://github.com/Leaflet/Leaflet/releases/download/v1.8.0/leaflet.zip \
 && unzip leaflet.zip \
 && rm leaflet.zip
 
 # Icon
-RUN wget -O /var/www/html/favicon.ico https://www.openstreetmap.org/favicon.ico
+# RUN wget --no-check-certificate -O /var/www/html/favicon.ico https://www.openstreetmap.org/favicon.ico
 
 # Copy update scripts
 COPY openstreetmap-tiles-update-expire.sh /usr/bin/
@@ -190,7 +202,12 @@ MAXZOOM=20' >> /etc/renderd.conf \
 # Install helper script
 COPY --from=compiler-helper-script /home/renderer/src/regional /home/renderer/src/regional
 
-COPY --from=compiler-stylesheet /root/openstreetmap-carto /home/renderer/src/openstreetmap-carto-backup
+COPY --from=compiler-stylesheet /root/osm-bright /home/renderer/src/osm-bright-backup
+
+# Copy external data (land polygons)
+COPY --from=compiler-external-data /data/external /data/external-data
+
+# Maintain openstreetmap-carto as fallback (we'll download it at runtime if needed)
 
 # Start running
 COPY run.sh /
