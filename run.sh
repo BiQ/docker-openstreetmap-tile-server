@@ -106,6 +106,31 @@ Map {
 EOF
         fi
         
+        # Create osm-bright.style file if it doesn't exist
+        if [ ! -f osm-bright.style ]; then
+            echo "INFO: Creating minimal osm-bright.style configuration..."
+            cat > osm-bright.style << 'EOF'
+# This is the osm2pgsql .style file for osm-bright.
+# It defines which OSM tags to import into PostgreSQL for the osm-bright style.
+
+# OsmType  Tag          DataType     Flags
+node,way   name         text         linear
+node,way   natural      text         polygon
+node,way   waterway     text         polygon
+node,way   landuse      text         polygon
+node,way   water        text         polygon
+node,way   highway      text         linear
+node,way   railway      text         linear
+node,way   building     text         polygon
+node,way   amenity      text         polygon
+node,way   place        text         polygon
+node,way   layer        int4         linear
+node,way   admin_level  text         linear
+node,way   boundary     text         linear
+way        way_area     real         linear # This is calculated during import
+EOF
+        fi
+        
         # Set default osm-bright parameters - no lua transform needed
         NAME_MML="${NAME_MML:-project.mml}"
     else
