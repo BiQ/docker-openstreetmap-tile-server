@@ -3,35 +3,40 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    apache2 \
-    cron \
-    dateutils \
-    fonts-hanazono \
-    fonts-noto-cjk \
-    fonts-noto-hinted \
-    fonts-noto-unhinted \
-    fonts-unifont \
-    gnupg2 \
-    gdal-bin \
-    liblua5.3-dev \
-    lua5.3 \
-    mapnik-utils \
-    npm \
-    osm2pgsql \
-    --fix-missing && \
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        apache2 \
+        cron \
+        dateutils \
+        fonts-hanazono \
+        fonts-noto-cjk \
+        fonts-noto-hinted \
+        fonts-noto-unhinted \
+        fonts-unifont \
+        gnupg \
+        gnupg2 \
+        gdal-bin \
+        liblua5.3-dev \
+        lua5.3 \
+        mapnik-utils \
+        npm \
+        osm2pgsql \
+        ca-certificates \
+        lsb-release \
+        locales \
+        wget \
+        curl \
+        git-core \
+        unzip \
+        unrar \
+        --fix-missing && \
+    locale-gen "$LANG" && update-locale LANG="$LANG" && \
+    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - && \
+    apt-get update && apt-get -y upgrade && \
     apt-get autoremove --yes && \
     rm -rf /var/lib/{apt,dpkg,cache,log}/
-
-RUN apt-get update \
-&& apt-get install -y --no-install-recommends \
- ca-certificates gnupg lsb-release locales \
- wget curl \
- git-core unzip unrar \
-&& locale-gen $LANG && update-locale LANG=$LANG \
-&& sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' \
-&& wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
-&& apt-get update && apt-get -y upgrade
 
 ###########################################################################################################
 
