@@ -50,9 +50,77 @@ docker run \
     import
 ```
 
-### Docker Hub
+### Complete Example: Denmark with OSM-Bright and GeoDanmark
 
-The osm-bright enabled image is available as: `biqaps/openstreetmap:3.0`
+Here's a complete example for setting up a Denmark tile server with osm-bright style and GeoDanmark integration:
+
+```bash
+# Create a data volume
+docker volume create denmark-osm-data
+
+# Import Denmark OSM data with osm-bright style
+docker run \
+    -e STYLE_TYPE=osm-bright \
+    -e DOWNLOAD_PBF=https://download.geofabrik.de/europe/denmark-latest.osm.pbf \
+    -e DOWNLOAD_POLY=https://download.geofabrik.de/europe/denmark.poly \
+    -e DOWNLOAD_GEODANMARK=enabled \
+    -v denmark-osm-data:/data/database/ \
+    biqaps/openstreetmap:3.0 \
+    import
+
+# Run the tile server
+docker run \
+    -p 8080:80 \
+    -e STYLE_TYPE=osm-bright \
+    -v denmark-osm-data:/data/database/ \
+    -d biqaps/openstreetmap:3.0 \
+    run
+```
+
+### Environment Variables
+
+The following environment variables control the tile server behavior:
+
+- `STYLE_TYPE`: Set to `osm-bright` for OSM-Bright style, or `openstreetmap-carto` (default) for the standard style
+- `DOWNLOAD_GEODANMARK`: Set to `enabled` to download GeoDanmark shapefiles (requires large download)
+- `DOWNLOAD_PBF`: URL to download OSM PBF data file
+- `DOWNLOAD_POLY`: URL to download polygon boundary file
+- `THREADS`: Number of threads for importing and rendering (default: 4)
+- `UPDATES`: Set to `enabled` for automatic updates
+- `NAME_LUA`, `NAME_STYLE`, `NAME_MML`, `NAME_SQL`: Override default style file names
+
+### Production Considerations
+
+For production use with GeoDanmark data:
+
+1. **Manual GeoDanmark Download**: The GeoDanmark shapefiles are ~4GB and require registration at [Kortforsyningen](https://download.kortforsyningen.dk/content/geodanmark)
+2. **External Data**: For production use, download the actual land polygon files:
+   - `https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip`
+   - `https://osmdata.openstreetmap.de/download/land-polygons-split-3857.zip`
+3. **Performance**: Use appropriate hardware and consider `FLAT_NODES=enabled` for large imports
+
+### Testing the Setup
+
+After starting the tile server, you can test it by accessing:
+
+- **Map Interface**: `http://localhost:8080` - Interactive map interface
+- **Tile API**: `http://localhost:8080/tile/{z}/{x}/{y}.png` - Direct tile access
+- **Example Tile**: `http://localhost:8080/tile/10/512/512.png` - Sample tile
+
+### Available Images
+
+- **Standard Image**: `overv/openstreetmap-tile-server` - Original image with openstreetmap-carto style
+- **OSM-Bright Image**: `biqaps/openstreetmap:3.0` - Enhanced image with osm-bright and GeoDanmark support
+
+### Build from Source
+
+To build the enhanced image locally:
+
+```bash
+git clone https://github.com/BiQ/docker-openstreetmap-tile-server.git
+cd docker-openstreetmap-tile-server
+make osm-bright-build
+```
 
 ## Setting up the server
 

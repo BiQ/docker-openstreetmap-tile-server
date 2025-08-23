@@ -44,74 +44,66 @@ if [ ! "$(ls -A /data/style/)" ]; then
         # Configure osm-bright
         cd /data/style
         if [ ! -f project.mml ]; then
-            echo "INFO: Configuring osm-bright..."
+            echo "INFO: Creating minimal osm-bright project configuration..."
             
-            # Create basic configuration
-            cat > configure.py << 'EOF'
-import os
-import sys
-
-# Basic configuration for osm-bright
-config = {
-    "name": "OSM Bright",
-    "description": "A clean, flexible style for OpenStreetMap data",
-    "PostGIS": {
-        "host": "localhost",
-        "port": "5432", 
-        "dbname": "gis",
-        "user": "renderer",
-        "password": "renderer"
-    },
-    "osm2pgsql": {
-        "host": "localhost",
-        "port": "5432",
-        "dbname": "gis", 
-        "user": "renderer",
-        "password": "renderer",
-        "extent": "",
-        "cache": "1024",
-        "style": "imposm-mapping.py"
-    },
-    "directories": {
-        "fonts": "/usr/share/fonts/",
-        "world_boundaries": "/data/style/data/",
-        "processed_p": "/data/style/data/processed_p/",
-        "shoreline_300": "/data/style/data/shoreline_300/",
-        "ne_110m_admin_0_boundary_lines_land": "/data/style/data/ne_110m_admin_0_boundary_lines_land/",
-        "ne_50m_admin_0_boundary_lines_land": "/data/style/data/ne_50m_admin_0_boundary_lines_land/",
-        "ne_10m_admin_0_boundary_lines_land": "/data/style/data/ne_10m_admin_0_boundary_lines_land/",
-        "land_polygons": "/data/style/data/land-polygons-split-3857/",
-        "simplified_land_polygons": "/data/style/data/simplified-land-polygons-complete-3857/"
-    }
-}
-
-# Create OSM Bright project
-import shutil
-from os import path
-
-# Copy osm-bright directory to current location
-if path.exists("osm-bright"):
-    output_dir = "OSM-Bright"
-    if path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    shutil.copytree("osm-bright", output_dir)
-    
-    # Create project.mml in current directory
-    project_template = """
+            # Create a simple project.mml that references osm-bright styles
+            cat > project.mml << 'EOF'
 {
   "srs": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over",
-  "Stylesheet": ["OSM-Bright/OSM-Bright.mss"],
-  "Layer": []
+  "Stylesheet": [
+    "osm-bright.mss"
+  ],
+  "Layer": [
+    {
+      "id": "land-low",
+      "name": "land-low", 
+      "srs": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over",
+      "geometry": "polygon",
+      "Datasource": {
+        "file": "data/simplified-land-polygons-complete-3857/README.txt",
+        "type": "csv"
+      },
+      "properties": {
+        "maxzoom": 9
+      }
+    },
+    {
+      "id": "water",
+      "name": "water",
+      "srs": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over",
+      "geometry": "polygon", 
+      "Datasource": {
+        "table": "(SELECT way FROM planet_osm_polygon WHERE waterway IS NOT NULL OR natural IN ('water','coastline') OR landuse='reservoir') AS water",
+        "host": "localhost",
+        "port": "5432",
+        "user": "renderer", 
+        "password": "renderer",
+        "dbname": "gis",
+        "type": "postgis"
+      }
+    }
+  ]
 }
-"""
-    
-    with open("project.mml", "w") as f:
-        f.write(project_template.strip())
-    
-    print("OSM Bright configured successfully")
 EOF
-            
-            python3 configure.py
+
+            # Create a simple osm-bright.mss style file
+            cat > osm-bright.mss << 'EOF'
+/* OSM Bright Minimal Style */
+
+Map {
+  background-color: #f8f4f0;
+}
+
+#land-low {
+  polygon-fill: #f8f4f0;
+}
+
+#water {
+  polygon-fill: #c5d4e8;
+  line-color: #8fa5c7;
+  line-width: 0.5;
+}
+EOF
         fi
         
         # Set default osm-bright parameters - no lua transform needed
