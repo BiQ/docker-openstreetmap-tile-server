@@ -9,14 +9,13 @@ RUN apt-get update \
  wget curl \
  git-core unzip unrar \
 && locale-gen $LANG && update-locale LANG=$LANG \
-&& sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' \
-&& wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
 && apt-get update && apt-get -y upgrade
 
 ###########################################################################################################
 
 FROM compiler-common AS compiler-stylesheet
 RUN cd ~ \
+&& git config --global http.sslverify false \
 && git clone --single-branch --branch v5.4.0 https://github.com/gravitystorm/openstreetmap-carto.git --depth 1 \
 && cd openstreetmap-carto \
 && sed -i 's/, "unifont Medium", "Unifont Upper Medium"//g' style/fonts.mss \
@@ -30,6 +29,7 @@ RUN cd ~ \
 FROM compiler-common AS compiler-helper-script
 RUN mkdir -p /home/renderer/src \
 && cd /home/renderer/src \
+&& git config --global http.sslverify false \
 && git clone https://github.com/zverik/regional \
 && cd regional \
 && rm -rf .git \
@@ -46,7 +46,7 @@ ENV AUTOVACUUM=on
 ENV UPDATES=disabled
 ENV REPLICATION_URL=https://planet.openstreetmap.org/replication/hour/
 ENV MAX_INTERVAL_SECONDS=3600
-ENV PG_VERSION 15
+ENV PG_VERSION 14
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
@@ -90,19 +90,20 @@ RUN apt-get update \
 RUN adduser --disabled-password --gecos "" renderer
 
 # Get Noto Emoji Regular font, despite it being deprecated by Google
-RUN wget https://github.com/googlefonts/noto-emoji/blob/9a5261d871451f9b5183c93483cbd68ed916b1e9/fonts/NotoEmoji-Regular.ttf?raw=true --content-disposition -P /usr/share/fonts/
+# RUN wget --no-check-certificate https://github.com/googlefonts/noto-emoji/blob/9a5261d871451f9b5183c93483cbd68ed916b1e9/fonts/NotoEmoji-Regular.ttf?raw=true --content-disposition -P /usr/share/fonts/
 
 # For some reason this one is missing in the default packages
-RUN wget https://github.com/stamen/terrain-classic/blob/master/fonts/unifont-Medium.ttf?raw=true --content-disposition -P /usr/share/fonts/
+# RUN wget --no-check-certificate https://github.com/stamen/terrain-classic/blob/master/fonts/unifont-Medium.ttf?raw=true --content-disposition -P /usr/share/fonts/
 
 # Install python libraries
-RUN pip3 install \
+RUN pip3 install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \
  requests \
  osmium \
  pyyaml
 
 # Install carto for stylesheet
-RUN npm install -g carto@1.2.0
+RUN npm config set strict-ssl false \
+&& npm install -g carto@1.2.0
 
 # Configure Apache
 RUN echo "LoadModule tile_module /usr/lib/apache2/modules/mod_tile.so" >> /etc/apache2/conf-available/mod_tile.conf \
@@ -115,12 +116,12 @@ RUN ln -sf /dev/stdout /var/log/apache2/access.log \
 # leaflet
 COPY leaflet-demo.html /var/www/html/index.html
 RUN cd /var/www/html/ \
-&& wget https://github.com/Leaflet/Leaflet/releases/download/v1.8.0/leaflet.zip \
+&& wget --no-check-certificate https://github.com/Leaflet/Leaflet/releases/download/v1.8.0/leaflet.zip \
 && unzip leaflet.zip \
 && rm leaflet.zip
 
 # Icon
-RUN wget -O /var/www/html/favicon.ico https://www.openstreetmap.org/favicon.ico
+# RUN wget --no-check-certificate -O /var/www/html/favicon.ico https://www.openstreetmap.org/favicon.ico
 
 # Copy update scripts
 COPY openstreetmap-tiles-update-expire.sh /usr/bin/
