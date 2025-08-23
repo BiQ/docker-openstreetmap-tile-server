@@ -173,10 +173,10 @@ if [ "$1" == "import" ]; then
     # Initialize PostgreSQL
     createPostgresConfig
     service postgresql start
-    sudo -u postgres createuser renderer
-    sudo -u postgres createdb -E UTF8 -O renderer gis
-    sudo -u postgres psql -d gis -c "CREATE EXTENSION postgis;"
-    sudo -u postgres psql -d gis -c "CREATE EXTENSION hstore;"
+    sudo -u postgres createuser --if-not-exists renderer
+    sudo -u postgres createdb -E UTF8 -O renderer gis || true
+    sudo -u postgres psql -d gis -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+    sudo -u postgres psql -d gis -c "CREATE EXTENSION IF NOT EXISTS hstore;"
     sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO renderer;"
     sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO renderer;"
     setPostgresPassword
