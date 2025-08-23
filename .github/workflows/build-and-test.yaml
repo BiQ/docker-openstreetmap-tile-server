@@ -96,8 +96,8 @@ jobs:
         run: |
           sha1sum *.png
           sha1sum --check <<EOF
-c226ca747874fb1307eef853feaf9d8db28cef2b *empty.png
-EOF
+          c226ca747874fb1307eef853feaf9d8db28cef2b *empty.png
+          EOF
           tiles=( $(ls *.png) )
           for ((i=0; i<${#tiles[@]}; i++)); do
             if [[ $(file --brief --mime-type "${tiles[$i]}") != 'image/png' ]]; then
