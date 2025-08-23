@@ -3,7 +3,56 @@
 [![Build Status](https://travis-ci.org/Overv/openstreetmap-tile-server.svg?branch=master)](https://travis-ci.org/Overv/openstreetmap-tile-server) [![](https://images.microbadger.com/badges/image/overv/openstreetmap-tile-server.svg)](https://microbadger.com/images/overv/openstreetmap-tile-server "openstreetmap-tile-server")
 [![Docker Image Version (latest semver)](https://img.shields.io/docker/v/overv/openstreetmap-tile-server?label=docker%20image)](https://hub.docker.com/r/overv/openstreetmap-tile-server/tags)
 
-This container allows you to easily set up an OpenStreetMap PNG tile server given a `.osm.pbf` file. It is based on the [latest Ubuntu 18.04 LTS guide](https://switch2osm.org/serving-tiles/manually-building-a-tile-server-18-04-lts/) from [switch2osm.org](https://switch2osm.org/) and therefore uses the default OpenStreetMap style.
+This container allows you to easily set up an OpenStreetMap PNG tile server given a `.osm.pbf` file. It is based on the [latest Ubuntu 18.04 LTS guide](https://switch2osm.org/serving-tiles/manually-building-a-tile-server-18-04-lts/) from [switch2osm.org](https://switch2osm.org/) and supports both the default OpenStreetMap style and the osm-bright style.
+
+## New Features: OSM-Bright Style & GeoDanmark Support
+
+This image now supports building OpenStreetMap tile servers with:
+- **OSM-Bright style**: A clean, minimalist map style developed by Mapbox
+- **GeoDanmark integration**: Support for incorporating GeoDanmark shapefiles for enhanced Denmark mapping
+- **Denmark-optimized setup**: Automatic Denmark OSM data download when using osm-bright style
+
+### Using OSM-Bright Style
+
+To use the osm-bright style instead of the default openstreetmap-carto:
+
+```bash
+# Build with Denmark data and osm-bright style
+docker run \
+    -e STYLE_TYPE=osm-bright \
+    -e DOWNLOAD_PBF=https://download.geofabrik.de/europe/denmark-latest.osm.pbf \
+    -e DOWNLOAD_POLY=https://download.geofabrik.de/europe/denmark.poly \
+    -v osm-data:/data/database/ \
+    biqaps/openstreetmap:3.0 \
+    import
+
+# Run the tile server
+docker run \
+    -p 8080:80 \
+    -e STYLE_TYPE=osm-bright \
+    -v osm-data:/data/database/ \
+    -d biqaps/openstreetmap:3.0 \
+    run
+```
+
+### GeoDanmark Integration
+
+To enable GeoDanmark shapefile integration (for enhanced Denmark mapping):
+
+```bash
+# Note: GeoDanmark files are large (~4GB) and require manual download
+# from https://download.kortforsyningen.dk/content/geodanmark
+docker run \
+    -e STYLE_TYPE=osm-bright \
+    -e DOWNLOAD_GEODANMARK=enabled \
+    -v osm-data:/data/database/ \
+    biqaps/openstreetmap:3.0 \
+    import
+```
+
+### Docker Hub
+
+The osm-bright enabled image is available as: `biqaps/openstreetmap:3.0`
 
 ## Setting up the server
 

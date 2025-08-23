@@ -16,12 +16,8 @@ RUN apt-get update \
 FROM compiler-common AS compiler-stylesheet
 RUN cd ~ \
 && git config --global http.sslverify false \
-&& git clone --single-branch --branch v5.4.0 https://github.com/gravitystorm/openstreetmap-carto.git --depth 1 \
-&& cd openstreetmap-carto \
-&& sed -i 's/, "unifont Medium", "Unifont Upper Medium"//g' style/fonts.mss \
-&& sed -i 's/"Noto Sans Tibetan Regular",//g' style/fonts.mss \
-&& sed -i 's/"Noto Sans Tibetan Bold",//g' style/fonts.mss \
-&& sed -i 's/Noto Sans Syriac Eastern Regular/Noto Sans Syriac Regular/g' style/fonts.mss \
+&& git clone https://github.com/mapbox/osm-bright.git --depth 1 \
+&& cd osm-bright \
 && rm -rf .git
 
 ###########################################################################################################
@@ -34,6 +30,19 @@ RUN mkdir -p /home/renderer/src \
 && cd regional \
 && rm -rf .git \
 && chmod u+x /home/renderer/src/regional/trim_osc.py
+
+###########################################################################################################
+
+FROM compiler-common AS compiler-external-data
+RUN mkdir -p /data/external \
+&& cd /data/external \
+&& echo "# Land polygons placeholders - in production download from:" > external-data.txt \
+&& echo "# https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip" >> external-data.txt \
+&& echo "# https://osmdata.openstreetmap.de/download/land-polygons-split-3857.zip" >> external-data.txt \
+&& mkdir -p simplified-land-polygons-complete-3857 \
+&& mkdir -p land-polygons-split-3857 \
+&& echo "placeholder" > simplified-land-polygons-complete-3857/README.txt \
+&& echo "placeholder" > land-polygons-split-3857/README.txt
 
 ###########################################################################################################
 
@@ -166,7 +175,12 @@ MAXZOOM=20' >> /etc/renderd.conf \
 # Install helper script
 COPY --from=compiler-helper-script /home/renderer/src/regional /home/renderer/src/regional
 
-COPY --from=compiler-stylesheet /root/openstreetmap-carto /home/renderer/src/openstreetmap-carto-backup
+COPY --from=compiler-stylesheet /root/osm-bright /home/renderer/src/osm-bright-backup
+
+# Copy external data (land polygons)
+COPY --from=compiler-external-data /data/external /data/external-data
+
+# Maintain openstreetmap-carto as fallback (we'll download it at runtime if needed)
 
 # Start running
 COPY run.sh /
