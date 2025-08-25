@@ -7,6 +7,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         apache2 \
+        bc \
         cron \
         dateutils \
         fonts-hanazono \
@@ -63,13 +64,8 @@ RUN mkdir -p /home/renderer/src \
 FROM compiler-common AS compiler-external-data
 RUN mkdir -p /data/external \
 && cd /data/external \
-&& echo "# Land polygons placeholders - in production download from:" > external-data.txt \
-&& echo "# https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip" >> external-data.txt \
-&& echo "# https://osmdata.openstreetmap.de/download/land-polygons-split-3857.zip" >> external-data.txt \
-&& mkdir -p simplified-land-polygons-complete-3857 \
-&& mkdir -p land-polygons-split-3857 \
-&& echo "placeholder" > simplified-land-polygons-complete-3857/README.txt \
-&& echo "placeholder" > land-polygons-split-3857/README.txt
+&& echo "# External data will be downloaded during import process" > external-data.txt \
+&& echo "# Land polygons will be downloaded from osmdata.openstreetmap.de" >> external-data.txt
 
 ###########################################################################################################
 
@@ -90,6 +86,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update \
 && apt-get install -y --no-install-recommends \
  apache2 \
+ bc \
  cron \
  dateutils \
  fonts-hanazono \
