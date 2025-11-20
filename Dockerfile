@@ -209,6 +209,10 @@ COPY --from=compiler-external-data /data/external /data/external-data
 
 # Maintain openstreetmap-carto as fallback (we'll download it at runtime if needed)
 
+# Copy prerender script
+COPY prerender-tiles.py /usr/local/bin/prerender-tiles
+RUN chmod +x /usr/local/bin/prerender-tiles
+
 # Start running
 COPY run.sh /
 ENTRYPOINT ["/run.sh"]

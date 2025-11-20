@@ -50,6 +50,91 @@ docker run \
     import
 ```
 
+### Prerendering Tiles
+
+The tile server now supports batch prerendering of tiles for faster initial load times. This is especially useful for production deployments where you want to cache tiles before serving them to users.
+
+#### Prerender Europe with OSM-Bright Style
+
+Here's a complete example for setting up and prerendering tiles for Europe using OSM-Bright style:
+
+```bash
+# Create a data volume
+docker volume create europe-osm-data
+
+# Import Europe OSM data with osm-bright style
+docker run \
+    -e STYLE_TYPE=osm-bright \
+    -e DOWNLOAD_PBF=https://download.geofabrik.de/europe-latest.osm.pbf \
+    -e DOWNLOAD_POLY=https://download.geofabrik.de/europe.poly \
+    -v europe-osm-data:/data/database/ \
+    --shm-size=512m \
+    biqaps/openstreetmap:3.0 \
+    import
+
+# Prerender tiles for Europe at zoom levels 0-14
+docker run \
+    -e STYLE_TYPE=osm-bright \
+    -e PRERENDER_REGION=europe \
+    -e PRERENDER_MIN_ZOOM=0 \
+    -e PRERENDER_MAX_ZOOM=14 \
+    -e PRERENDER_THREADS=8 \
+    -v europe-osm-data:/data/database/ \
+    --shm-size=512m \
+    biqaps/openstreetmap:3.0 \
+    prerender
+
+# Run the tile server with prerendered tiles
+docker run \
+    -p 8080:80 \
+    -e STYLE_TYPE=osm-bright \
+    -v europe-osm-data:/data/database/ \
+    --shm-size=512m \
+    -d biqaps/openstreetmap:3.0 \
+    run
+```
+
+#### Prerendering Environment Variables
+
+- `PRERENDER_REGION`: Predefined region to prerender. Options: `world`, `europe`, `denmark`, `luxembourg`, `germany`, `france`, `uk`, `spain`, `italy`
+- `PRERENDER_BBOX`: Custom bounding box as `min_lat,min_lon,max_lat,max_lon` (alternative to PRERENDER_REGION)
+- `PRERENDER_MIN_ZOOM`: Minimum zoom level to prerender (default: 0)
+- `PRERENDER_MAX_ZOOM`: Maximum zoom level to prerender (default: 14)
+- `PRERENDER_THREADS`: Number of parallel rendering threads (default: 4)
+
+#### Zoom Level Recommendations
+
+For production tile servers, the following zoom levels are recommended:
+
+- **Light traffic / overview maps**: Zoom 0-8 (minimal tiles, fast prerender)
+- **Medium traffic / city-level**: Zoom 0-12 (balanced coverage)
+- **Production deployment**: Zoom 0-14 (standard recommendation, ~15-20 hours for Europe)
+- **High detail areas**: Zoom 0-16 (large areas only, very time-consuming)
+
+#### Custom Bounding Box Example
+
+To prerender a custom region, use the `PRERENDER_BBOX` variable:
+
+```bash
+# Prerender custom bounding box (e.g., Benelux region)
+docker run \
+    -e STYLE_TYPE=osm-bright \
+    -e PRERENDER_BBOX="49.5,2.5,53.5,7.5" \
+    -e PRERENDER_MIN_ZOOM=0 \
+    -e PRERENDER_MAX_ZOOM=14 \
+    -v europe-osm-data:/data/database/ \
+    biqaps/openstreetmap:3.0 \
+    prerender
+```
+
+#### Performance Considerations
+
+- **Memory**: Use `--shm-size=512m` or higher for large imports and prerendering
+- **Disk Space**: Europe at zoom 0-14 requires significant storage (50-200GB depending on style)
+- **Time**: Prerendering Europe at zoom 0-14 can take 15-20 hours on a modern server
+- **Threads**: Increase `PRERENDER_THREADS` based on your CPU cores (e.g., 8-16 for production servers)
+
+
 ### Complete Example: Denmark with OSM-Bright and GeoDanmark
 
 Here's a complete example for setting up a Denmark tile server with osm-bright style and GeoDanmark integration:
@@ -81,6 +166,7 @@ docker run \
 
 The following environment variables control the tile server behavior:
 
+**General Variables:**
 - `STYLE_TYPE`: Set to `osm-bright` for OSM-Bright style, or `openstreetmap-carto` (default) for the standard style
 - `DOWNLOAD_GEODANMARK`: Set to `enabled` to download GeoDanmark shapefiles (requires large download)
 - `DOWNLOAD_PBF`: URL to download OSM PBF data file
@@ -88,6 +174,14 @@ The following environment variables control the tile server behavior:
 - `THREADS`: Number of threads for importing and rendering (default: 4)
 - `UPDATES`: Set to `enabled` for automatic updates
 - `NAME_LUA`, `NAME_STYLE`, `NAME_MML`, `NAME_SQL`: Override default style file names
+
+**Prerendering Variables:**
+- `PRERENDER_REGION`: Predefined region to prerender (world, europe, denmark, luxembourg, etc.)
+- `PRERENDER_BBOX`: Custom bounding box as `min_lat,min_lon,max_lat,max_lon`
+- `PRERENDER_MIN_ZOOM`: Minimum zoom level to prerender (default: 0)
+- `PRERENDER_MAX_ZOOM`: Maximum zoom level to prerender (default: 14)
+- `PRERENDER_THREADS`: Number of parallel rendering threads (default: 4)
+
 
 ### Production Considerations
 
