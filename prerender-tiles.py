@@ -30,7 +30,7 @@ def get_tile_bounds(min_lat, min_lon, max_lat, max_lon, zoom):
     return min_x, min_y, max_x, max_y
 
 
-def render_tile(host, port, z, x, y, style='default', timeout=60):
+def render_tile(host, port, z, x, y, timeout=60):
     """Render a single tile by making HTTP request."""
     url = f"http://{host}:{port}/tile/{z}/{x}/{y}.png"
     try:
@@ -84,6 +84,7 @@ def render_tiles(host, port, min_zoom, max_zoom, bbox=None, threads=4, verbose=F
         
         zoom_successful = 0
         zoom_failed = 0
+        last_update_time = time.time()
         
         # Create list of tiles to render
         tiles = [(zoom, x, y) for x in range(min_x, max_x + 1) for y in range(min_y, max_y + 1)]
@@ -104,8 +105,13 @@ def render_tiles(host, port, min_zoom, max_zoom, bbox=None, threads=4, verbose=F
                 
                 if verbose or not success:
                     print(message)
-                elif zoom_successful % 100 == 0:
-                    print(f"  Progress: {zoom_successful}/{zoom_tiles} tiles", end='\r')
+                else:
+                    # Update progress every 100 tiles or every 5 seconds
+                    current_time = time.time()
+                    if zoom_successful % 100 == 0 or (current_time - last_update_time) >= 5:
+                        percent = (zoom_successful / zoom_tiles * 100) if zoom_tiles > 0 else 0
+                        print(f"  Progress: {zoom_successful}/{zoom_tiles} tiles ({percent:.1f}%)", end='\r')
+                        last_update_time = current_time
         
         print(f"  Zoom {zoom} complete: {zoom_successful} successful, {zoom_failed} failed")
         print()

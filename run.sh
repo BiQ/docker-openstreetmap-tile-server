@@ -410,7 +410,7 @@ if [ "$1" == "prerender" ]; then
     # Build prerender command arguments
     PRERENDER_ARGS="--min-zoom ${PRERENDER_MIN_ZOOM:-0} --max-zoom ${PRERENDER_MAX_ZOOM:-14}"
     PRERENDER_ARGS="$PRERENDER_ARGS --threads ${PRERENDER_THREADS:-4}"
-    
+
     if [ -n "${PRERENDER_REGION:-}" ]; then
         PRERENDER_ARGS="$PRERENDER_ARGS --region ${PRERENDER_REGION}"
     elif [ -n "${PRERENDER_BBOX:-}" ]; then
