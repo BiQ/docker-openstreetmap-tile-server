@@ -170,7 +170,7 @@ EOF
         # Download simplified land polygons
         if [ ! -f simplified-land-polygons-complete-3857/simplified_land_polygons.shp ]; then
             echo "INFO: Downloading simplified land polygons..."
-            wget --no-check-certificate -O simplified-land-polygons-complete-3857.zip \
+            wget -O simplified-land-polygons-complete-3857.zip \
                 https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip
             unzip simplified-land-polygons-complete-3857.zip
             rm simplified-land-polygons-complete-3857.zip
@@ -179,7 +179,7 @@ EOF
         # Download detailed land polygons
         if [ ! -f land-polygons-split-3857/land_polygons.shp ]; then
             echo "INFO: Downloading land polygons split..."
-            wget --no-check-certificate -O land-polygons-split-3857.zip \
+            wget -O land-polygons-split-3857.zip \
                 https://osmdata.openstreetmap.de/download/land-polygons-split-3857.zip
             unzip land-polygons-split-3857.zip
             rm land-polygons-split-3857.zip
