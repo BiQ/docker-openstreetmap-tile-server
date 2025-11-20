@@ -134,6 +134,13 @@ docker run \
 - **Time**: Prerendering Europe at zoom 0-14 can take 15-20 hours on a modern server
 - **Threads**: Increase `PRERENDER_THREADS` based on your CPU cores (e.g., 8-16 for production servers)
 
+#### Ready-to-Use Example Scripts
+
+Complete example scripts for common scenarios are available in the [`examples/`](examples/) directory:
+- **Europe setup**: Full production setup with prerendering ([`europe-osm-bright-setup.sh`](examples/europe-osm-bright-setup.sh))
+- **Luxembourg test**: Quick test setup for development ([`luxembourg-test.sh`](examples/luxembourg-test.sh))
+
+See the [examples README](examples/README.md) for detailed usage instructions and customization options.
 
 ### Complete Example: Denmark with OSM-Bright and GeoDanmark
 
