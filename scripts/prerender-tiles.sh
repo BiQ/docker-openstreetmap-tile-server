@@ -18,6 +18,10 @@ MAX_LON=$4
 MIN_ZOOM=$5
 MAX_ZOOM=$6
 
+# Configuration for error handling and progress reporting
+MAX_CONSECUTIVE_FAILURES=${MAX_CONSECUTIVE_FAILURES:-10}
+PROGRESS_PERCENT_STEP=${PROGRESS_PERCENT_STEP:-10}
+
 echo "Starting prerendering for bounds: ($MIN_LAT,$MIN_LON) to ($MAX_LAT,$MAX_LON)"
 echo "Zoom levels: $MIN_ZOOM to $MAX_ZOOM"
 
@@ -157,6 +161,8 @@ echo "Total tiles to render: $TOTAL_TILES"
 
 # Prerender tiles
 RENDERED_TILES=0
+CONSECUTIVE_FAILURES=0
+NEXT_PROGRESS_PERCENT=$PROGRESS_PERCENT_STEP
 START_TIME=$(date +%s)
 
 for zoom in $(seq $MIN_ZOOM $MAX_ZOOM); do
@@ -179,21 +185,38 @@ for zoom in $(seq $MIN_ZOOM $MAX_ZOOM); do
             # Request tile to trigger rendering
             if curl -s "http://localhost/tile/$zoom/$x/$y.png" > /dev/null; then
                 echo "Successfully rendered tile $zoom/$x/$y"
+                CONSECUTIVE_FAILURES=0
             else
                 echo "Failed to render tile $zoom/$x/$y"
+                CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+                if [ $CONSECUTIVE_FAILURES -ge $MAX_CONSECUTIVE_FAILURES ]; then
+                    echo "Error: Exceeded maximum consecutive tile rendering failures ($MAX_CONSECUTIVE_FAILURES). Halting prerendering."
+                    exit 2
+                fi
             fi
 
             RENDERED_TILES=$((RENDERED_TILES + 1))
 
-            # Progress reporting every 10 tiles for testing
-            if [ $((RENDERED_TILES % 10)) -eq 0 ] || [ $RENDERED_TILES -eq $TOTAL_TILES ]; then
+            # Progress reporting based on percentage intervals
+            PERCENT=$((RENDERED_TILES * 100 / TOTAL_TILES))
+            if [ $PERCENT -ge $NEXT_PROGRESS_PERCENT ] || [ $RENDERED_TILES -eq $TOTAL_TILES ]; then
                 CURRENT_TIME=$(date +%s)
                 ELAPSED=$((CURRENT_TIME - START_TIME))
-                PERCENT=$((RENDERED_TILES * 100 / TOTAL_TILES))
-                RATE=$((RENDERED_TILES / (ELAPSED + 1)))
-                ETA=$(( (TOTAL_TILES - RENDERED_TILES) / (RATE + 1) ))
+                
+                if [ "$ELAPSED" -le 0 ]; then
+                    RATE=0
+                else
+                    RATE=$((RENDERED_TILES / ELAPSED))
+                fi
+                
+                if [ "$RATE" -gt 0 ]; then
+                    ETA=$(( (TOTAL_TILES - RENDERED_TILES) / RATE ))
+                else
+                    ETA="N/A"
+                fi
 
                 echo "Progress: $RENDERED_TILES/$TOTAL_TILES ($PERCENT%) - Rate: ${RATE} tiles/sec - ETA: ${ETA}s"
+                NEXT_PROGRESS_PERCENT=$((NEXT_PROGRESS_PERCENT + PROGRESS_PERCENT_STEP))
             fi
         done
     done
@@ -207,7 +230,11 @@ service apache2 stop 2>/dev/null || true
 service postgresql stop
 
 TOTAL_TIME=$(($(date +%s) - START_TIME))
-FINAL_RATE=$((RENDERED_TILES / (TOTAL_TIME + 1)))
+if [ "$TOTAL_TIME" -eq 0 ]; then
+    FINAL_RATE="N/A"
+else
+    FINAL_RATE=$((RENDERED_TILES / TOTAL_TIME))
+fi
 
 echo "Prerendering completed!"
 echo "Total tiles rendered: $RENDERED_TILES"
