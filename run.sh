@@ -37,9 +37,19 @@ if [ ! "$(ls -A /data/style/)" ]; then
         echo "INFO: Using osm-bright style"
         mv /home/renderer/src/osm-bright-backup/* /data/style/
         
-        # Copy external data to style directory
+        # Download external data (land polygons) for osm-bright
+        echo "INFO: Downloading external data for osm-bright..."
         mkdir -p /data/style/data
-        cp -r /data/external-data/* /data/style/data/
+        cd /data/style/data
+        
+        # Download simplified land polygons
+        if [ ! -f simplified-land-polygons-complete-3857/simplified_land_polygons.shp ]; then
+            echo "INFO: Downloading simplified land polygons..."
+            wget --no-check-certificate -O simplified-land-polygons-complete-3857.zip \
+                https://osmdata.openstreetmap.de/download/simplified-land-polygons-complete-3857.zip
+            unzip simplified-land-polygons-complete-3857.zip
+            rm simplified-land-polygons-complete-3857.zip
+        fi
         
         # Configure osm-bright
         cd /data/style
@@ -60,8 +70,8 @@ if [ ! "$(ls -A /data/style/)" ]; then
       "srs": "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over",
       "geometry": "polygon",
       "Datasource": {
-        "file": "data/simplified-land-polygons-complete-3857/README.txt",
-        "type": "csv"
+        "file": "data/simplified-land-polygons-complete-3857/simplified_land_polygons.shp",
+        "type": "shape"
       },
       "properties": {
         "maxzoom": 9
