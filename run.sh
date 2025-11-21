@@ -13,10 +13,11 @@ function setPostgresPassword() {
 }
 
 if [ "$#" -ne 1 ]; then
-    echo "usage: <import|run>"
+    echo "usage: <import|run|prerender>"
     echo "commands:"
     echo "    import: Set up the database and import /data/region.osm.pbf"
     echo "    run: Runs Apache and renderd to serve tiles at /tile/{z}/{x}/{y}.png"
+    echo "    prerender: Start server and prerender tiles for configured region and zoom levels"
     echo "environment variables:"
     echo "    THREADS: defines number of threads used for importing / tile rendering"
     echo "    UPDATES: consecutive updates (enabled/disabled)"
@@ -26,6 +27,12 @@ if [ "$#" -ne 1 ]; then
     echo "    NAME_SQL: name of the .sql file to use"
     echo "    STYLE_TYPE: osm-bright or openstreetmap-carto (default: openstreetmap-carto)"
     echo "    DOWNLOAD_GEODANMARK: if enabled, downloads GeoDanmark shapefiles"
+    echo "prerendering environment variables:"
+    echo "    PRERENDER_REGION: region to prerender (world, europe, denmark, luxembourg, etc.)"
+    echo "    PRERENDER_BBOX: custom bounding box as 'min_lat,min_lon,max_lat,max_lon'"
+    echo "    PRERENDER_MIN_ZOOM: minimum zoom level to prerender (default: 0)"
+    echo "    PRERENDER_MAX_ZOOM: maximum zoom level to prerender (default: 14)"
+    echo "    PRERENDER_THREADS: number of parallel rendering threads (default: 4)"
     exit 1
 fi
 
@@ -349,6 +356,82 @@ if [ "$1" == "run" ]; then
     service postgresql stop
 
     exit 0
+fi
+
+if [ "$1" == "prerender" ]; then
+    # Clean /tmp
+    rm -rf /tmp/*
+
+    # migrate old files
+    if [ -f /data/database/PG_VERSION ] && ! [ -d /data/database/postgres/ ]; then
+        mkdir /data/database/postgres/
+        mv /data/database/* /data/database/postgres/
+    fi
+    if [ -f /nodes/flat_nodes.bin ] && ! [ -f /data/database/flat_nodes.bin ]; then
+        mv /nodes/flat_nodes.bin /data/database/flat_nodes.bin
+    fi
+    if [ -f /data/tiles/data.poly ] && ! [ -f /data/database/region.poly ]; then
+        mv /data/tiles/data.poly /data/database/region.poly
+    fi
+
+    # sync planet-import-complete file
+    if [ -f /data/tiles/planet-import-complete ] && ! [ -f /data/database/planet-import-complete ]; then
+        cp /data/tiles/planet-import-complete /data/database/planet-import-complete
+    fi
+    if ! [ -f /data/tiles/planet-import-complete ] && [ -f /data/database/planet-import-complete ]; then
+        cp /data/database/planet-import-complete /data/tiles/planet-import-complete
+    fi
+
+    # Fix postgres data privileges
+    chown -R postgres: /var/lib/postgresql/ /data/database/postgres/
+
+    # Configure Apache CORS
+    if [ "${ALLOW_CORS:-}" == "enabled" ] || [ "${ALLOW_CORS:-}" == "1" ]; then
+        echo "export APACHE_ARGUMENTS='-D ALLOW_CORS'" >> /etc/apache2/envvars
+    fi
+
+    # Initialize PostgreSQL and Apache
+    createPostgresConfig
+    service postgresql start
+    service apache2 restart
+    setPostgresPassword
+
+    # Configure renderd threads
+    sed -i -E "s/num_threads=[0-9]+/num_threads=${THREADS:-4}/g" /etc/renderd.conf
+
+    # Start renderd in background
+    sudo -u renderer renderd -f -c /etc/renderd.conf &
+    renderd_pid=$!
+
+    # Wait for renderd to be ready
+    echo "Waiting for renderd to start..."
+    sleep 10
+
+    # Build prerender command arguments
+    PRERENDER_ARGS="--min-zoom ${PRERENDER_MIN_ZOOM:-0} --max-zoom ${PRERENDER_MAX_ZOOM:-14}"
+    PRERENDER_ARGS="$PRERENDER_ARGS --threads ${PRERENDER_THREADS:-4}"
+
+    if [ -n "${PRERENDER_REGION:-}" ]; then
+        PRERENDER_ARGS="$PRERENDER_ARGS --region ${PRERENDER_REGION}"
+    elif [ -n "${PRERENDER_BBOX:-}" ]; then
+        PRERENDER_ARGS="$PRERENDER_ARGS --bbox ${PRERENDER_BBOX}"
+    else
+        echo "ERROR: Either PRERENDER_REGION or PRERENDER_BBOX must be set"
+        kill $renderd_pid
+        service postgresql stop
+        exit 1
+    fi
+
+    # Run prerender script
+    echo "Starting tile prerendering..."
+    /usr/local/bin/prerender-tiles $PRERENDER_ARGS
+    prerender_exit=$?
+
+    # Cleanup
+    kill $renderd_pid
+    service postgresql stop
+
+    exit $prerender_exit
 fi
 
 echo "invalid command"
