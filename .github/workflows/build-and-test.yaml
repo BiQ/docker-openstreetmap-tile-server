@@ -1,4 +1,4 @@
-name: Build and Test Image
+name: Denmark OSM-Bright Full Workflow
 
 on:
   push:
@@ -15,178 +15,85 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  IMAGE: ${{ github.repository_owner }}/docker-openstreetmap-tile-server
-  TAG: ${{ github.sha }}
-
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            mode: build-and-test
+  denmark-osm-bright:
     runs-on: ubuntu-latest
     env:
-      VOLUME: osm-db
-      CONTAINER: osm-www
-      MOUNT: /data/database/
-      PLATFORM: linux/${{ matrix.arch }}${{ (matrix.variant != '' && format('/{0}', matrix.variant)) || '' }}
+      IMAGE: ${{ github.repository_owner }}/docker-openstreetmap-tile-server
+      TAG: ${{ github.sha }}
+      BIQAPS_IMAGE: biqaps/openstreetmap:3.1
+      DENMARK_OSM_DATA: denmark-osm-data
+      DENMARK_STYLE: denmark-style
+      DENMARK_TILES: denmark-tiles
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: ${{ matrix.arch }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Normalize IMAGE to lowercase
+      - name: Build OSM-Bright Image
         run: |
-          echo "IMAGE=$(echo '${{ env.IMAGE }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          docker build -t ${{ env.BIQAPS_IMAGE }} .
 
-      - name: Docker Build
-        uses: docker/build-push-action@v3
-        with:
-          pull: true
-          load: ${{ matrix.mode == 'build-and-test' }}
-          platforms: ${{ env.PLATFORM }}
-          context: .
-          file: ./Dockerfile
-          tags: ${{ env.IMAGE }}:${{ env.TAG }}
-          cache-from: type=gha,scope=${{ github.workflow }}:${{ env.PLATFORM }}
-          cache-to: type=gha,scope=${{ github.workflow }}:${{ env.PLATFORM }},mode=max
-
-      - name: Import Luxembourg
-        if: ${{ matrix.mode == 'build-and-test' }}
+      - name: Create Denmark Volumes
         run: |
-          docker volume create "${VOLUME}"
-          docker run --rm --shm-size=128M -v "${VOLUME}:${MOUNT}" -e UPDATES=enabled "${IMAGE}:${TAG}" import
+          docker volume create ${{ env.DENMARK_OSM_DATA }}
+          docker volume create ${{ env.DENMARK_STYLE }}
+          docker volume create ${{ env.DENMARK_TILES }}
 
-      - name: Start Server
-        if: ${{ matrix.mode == 'build-and-test' }}
+      - name: Import Denmark OSM Data with OSM-Bright Style
         run: |
-          docker run --shm-size=128M -v "${VOLUME}:${MOUNT}" -e UPDATES=enabled -p 80:80 -d --name "${CONTAINER}" "${IMAGE}:${TAG}" run
+          docker run --rm \
+            -e STYLE_TYPE=osm-bright \
+            -e DOWNLOAD_PBF=https://download.geofabrik.de/europe/denmark-latest.osm.pbf \
+            -e DOWNLOAD_POLY=https://download.geofabrik.de/europe/denmark.poly \
+            -e THREADS=4 \
+            -v ${{ env.DENMARK_OSM_DATA }}:/data/database/ \
+            -v ${{ env.DENMARK_STYLE }}:/data/style/ \
+            ${{ env.BIQAPS_IMAGE }} import
+
+      - name: Prerender Denmark Tiles (zoom 0-10)
+        run: |
+          docker run --rm \
+            -e STYLE_TYPE=osm-bright \
+            -e THREADS=4 \
+            -v ${{ env.DENMARK_OSM_DATA }}:/data/database/ \
+            -v ${{ env.DENMARK_STYLE }}:/data/style/ \
+            -v ${{ env.DENMARK_TILES }}:/data/tiles/ \
+            -v ${{ github.workspace }}/scripts:/scripts \
+            --entrypoint bash \
+            ${{ env.BIQAPS_IMAGE }} \
+            -c "/scripts/prerender-tiles.sh 54.4 8.0 57.8 15.2 0 10"
+
+      - name: Start Denmark OSM-Bright Tile Server
+        run: |
+          docker run --rm \
+            -p 8080:80 \
+            -e STYLE_TYPE=osm-bright \
+            -v ${{ env.DENMARK_OSM_DATA }}:/data/database/ \
+            -v ${{ env.DENMARK_STYLE }}:/data/style/ \
+            -v ${{ env.DENMARK_TILES }}:/data/tiles/ \
+            -d ${{ env.BIQAPS_IMAGE }} run
           sleep 30
-          docker logs "${CONTAINER}"
+          docker ps -a
+          docker logs $(docker ps -q --filter ancestor=${{ env.BIQAPS_IMAGE }})
 
-      - name: Download Tiles
-        if: ${{ matrix.mode == 'build-and-test' }}
+      - name: Download Example Tiles
         run: |
-          curl http://localhost/tile/0/0/0.png            --fail -o 000.png
-          curl http://localhost/tile/1/0/0.png            --fail -o 100.png
-          curl http://localhost/tile/1/0/1.png            --fail -o 101.png
-          curl http://localhost/tile/1/1/0.png            --fail -o 110.png
-          curl http://localhost/tile/1/1/1.png            --fail -o 111.png
-          curl http://localhost/tile/18/138474/85459.png  --fail -o empty.png
-          curl http://localhost/tile/18/135536/89345.png  --fail -o example.png
+          curl http://localhost:8080/tile/0/0/0.png --fail -o 000.png
+          curl http://localhost:8080/tile/1/0/0.png --fail -o 100.png
+          curl http://localhost:8080/tile/1/0/1.png --fail -o 101.png
+          curl http://localhost:8080/tile/1/1/0.png --fail -o 110.png
+          curl http://localhost:8080/tile/1/1/1.png --fail -o 111.png
+          curl http://localhost:8080/tile/10/138/85.png --fail -o empty.png
+          curl http://localhost:8080/tile/10/135/89.png --fail -o example.png
 
       - name: Upload Tiles
-        if: ${{ matrix.mode == 'build-and-test' }}
         uses: actions/upload-artifact@v4
         with:
           name: tiles
           path: '*.png'
 
-      - name: Verify Tiles
-        if: ${{ matrix.mode == 'build-and-test' }}
+      - name: Cleanup Denmark Containers and Volumes
         run: |
-          sha1sum *.png
-          sha1sum --check <<EOF
-          c226ca747874fb1307eef853feaf9d8db28cef2b *empty.png
-          EOF
-          tiles=( $(ls *.png) )
-          for ((i=0; i<${#tiles[@]}; i++)); do
-            if [[ $(file --brief --mime-type "${tiles[$i]}") != 'image/png' ]]; then
-              echo "ERROR: ${tiles[$i]} is not a image/png file" >&2
-              exit 1
-            fi
-            for ((j=i+1; j<${#tiles[@]}; j++)); do
-              if diff "${tiles[$i]}" "${tiles[$j]}"; then
-                echo "ERROR: ${tiles[$i]} is identical to ${tiles[$j]}" >&2
-                exit 2
-              fi
-            done
-          done
-
-      - name: Cleanup
-        if: ${{ matrix.mode == 'build-and-test' }}
-        run: |
-          docker rm --force --volumes "${CONTAINER}"
-          docker volume rm --force "${VOLUME}"
-          docker rmi --force "${IMAGE}:${TAG}"
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: ${{ github.event_name != 'pull_request' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Debug Environment Variables
-        run: |
-          echo "IMAGE: ${{ env.IMAGE }}"
-          echo "TAG: ${{ env.TAG }}"
-          if [[ -z "${{ env.IMAGE }}" || -z "${{ env.TAG }}" ]]; then
-            echo "ERROR: IMAGE or TAG is not set!" >&2
-            exit 1
-          fi
-
-      - name: Normalize IMAGE and set DOCKERHUB_IMAGE
-        run: |
-          echo "IMAGE=$(echo '${{ env.IMAGE }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          if [[ -n "${{ secrets.DOCKERHUB_USERNAME }}" && -n "${{ secrets.DOCKERHUB_TOKEN }}" ]]; then
-            echo "DOCKERHUB_IMAGE=${IMAGE}" >> $GITHUB_ENV
-          fi
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: |
-            ${{ env.DOCKERHUB_IMAGE }}
-            ghcr.io/${{ env.IMAGE }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: amd64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to DockerHub
-        if: ${{ env.DOCKERHUB_IMAGE != '' }}
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push
-        uses: docker/build-push-action@v3
-        with:
-          pull: true
-          push: true
-          platforms: linux/amd64
-          context: .
-          file: ./Dockerfile
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=${{ github.workflow }}:linux/amd64
+          docker ps -a --filter volume=${{ env.DENMARK_OSM_DATA }} --filter volume=${{ env.DENMARK_STYLE }} --filter volume=${{ env.DENMARK_TILES }} -q | xargs -r docker rm -f
+          docker volume rm -f ${{ env.DENMARK_OSM_DATA }} ${{ env.DENMARK_STYLE }} ${{ env.DENMARK_TILES }} || true
+          docker rmi --force ${{ env.BIQAPS_IMAGE }}
